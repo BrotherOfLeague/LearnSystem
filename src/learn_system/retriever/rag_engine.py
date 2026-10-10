@@ -1,0 +1,142 @@
+"""RAG 引擎"""
+
+import logging
+
+from learn_system.llm.base import LLMClient
+from learn_system.retriever.retriever import Retriever
+from learn_system.retriever.vector_store import SearchResult
+
+logger = logging.getLogger(__name__)
+
+
+class Source:
+    """信息来源"""
+
+    def __init__(self, url: str | None, path: str, title: str, score: float):
+        self.url = url
+        self.path = path
+        self.title = title
+        self.score = score
+
+
+class RAGResponse:
+    """RAG 响应"""
+
+    def __init__(
+        self,
+        question: str,
+        answer: str,
+        sources: list[Source],
+        evidence_count: int,
+    ):
+        self.question = question
+        self.answer = answer
+        self.sources = sources
+        self.evidence_count = evidence_count
+
+    def format(self) -> str:
+        """格式化输出"""
+        output = [f"**问题：** {self.question}", "", f"**回答：**\n{self.answer}"]
+
+        if self.sources:
+            output.append("")
+            output.append("**参考来源：**")
+            for i, source in enumerate(self.sources, 1):
+                title = source.title
+                url = source.url or source.path
+                output.append(f"  {i}. [{title}]({url})")
+
+        return "\n".join(output)
+
+
+class RAGEngine:
+    """RAG 引擎"""
+
+    def __init__(
+        self,
+        retriever: Retriever,
+        llm_client: LLMClient,
+        min_relevance_score: float = 0.3,
+    ):
+        self.retriever = retriever
+        self.llm_client = llm_client
+        self.min_relevance_score = min_relevance_score
+
+    def ask(self, question: str, top_k: int | None = None) -> RAGResponse:
+        """问答"""
+        results = self.retriever.retrieve(question, top_k)
+
+        relevant = [r for r in results if r.score >= self.min_relevance_score]
+
+        if not relevant:
+            return RAGResponse(
+                question=question,
+                answer="抱歉，我没有找到与您问题相关的文档来回答这个问题。",
+                sources=[],
+                evidence_count=0,
+            )
+
+        context = self._build_context(relevant)
+        prompt = self._build_prompt(question, context)
+        response = self.llm_client.generate(prompt)
+        sources = self._extract_sources(relevant)
+
+        return RAGResponse(
+            question=question,
+            answer=response.content,
+            sources=sources,
+            evidence_count=len(relevant),
+        )
+
+    def _build_context(self, results: list[SearchResult]) -> str:
+        """构建上下文"""
+        context_parts = []
+
+        for i, result in enumerate(results, 1):
+            chunk = result.chunk
+            context_parts.append(
+                f"[{i}] (来源: {chunk.source_url or chunk.source_path}, "
+                f"相似度: {result.score:.2f})\n{chunk.text}\n"
+            )
+
+        return "\n---\n".join(context_parts)
+
+    def _build_prompt(self, question: str, context: str) -> str:
+        """构建提示词"""
+        return f"""你是一个 Python 官方文档助手。请根据以下参考资料回答问题。
+
+**注意：**
+1. 只根据提供的参考资料回答，不要编造信息
+2. 如果参考资料中没有相关信息，请说明"我无法根据提供的资料回答这个问题"
+3. 回答要简洁、准确
+
+**参考资料：**
+{context}
+
+**问题：**
+{question}
+
+**回答：**
+"""
+
+    def _extract_sources(self, results: list[SearchResult]) -> list[Source]:
+        """提取来源"""
+        sources = []
+        seen = set()
+
+        for result in results:
+            chunk = result.chunk
+            source_key = chunk.source_url or chunk.source_path
+
+            if source_key and source_key not in seen:
+                seen.add(source_key)
+                sources.append(
+                    Source(
+                        url=chunk.source_url,
+                        path=chunk.source_path,
+                        title=chunk.section_path[-1] if chunk.section_path else "Unknown",
+                        score=result.score,
+                    )
+                )
+
+        return sources
