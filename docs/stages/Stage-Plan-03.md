@@ -7,24 +7,45 @@
 Stage-Plan-02 已通过验收；总体需求和设计文档已阅读。
 
 ## 3. 任务清单
-1. 定义 Document 与 Chunk 模型。
-2. 按章节、段落、列表和代码块切分。
-3. 生成稳定 ID 与内容哈希。
-4. 输出可检查的 JSONL 分块结果。
+1. [x] 定义 Document 与 Chunk 模型。
+2. [x] 按章节、段落、列表和代码块切分。
+3. [x] 生成稳定 ID 与内容哈希。
+4. [x] 输出可检查的 JSONL 分块结果。
 
 ## 4. 涉及文件
-以本阶段实际实现为准。优先沿用 `设计文档.md` 中定义的目录与模块职责；如需偏离，应记录原因并同步更新设计文档。
+- `src/learn_system/models/chunk.py` - 分块数据模型（Chunk, ChunkingResult）
+- `src/learn_system/chunker/rule_based_chunker.py` - 基于规则的分块器
+- `tests/unit/test_chunker.py` - 分块器测试
 
 ## 5. 测试与验收
-- [ ] Chunk 元数据齐全。
-- [ ] 代码块不会被随意截断。
-- [ ] 重复内容可检测。
+- [x] Chunk 元数据齐全。
+- [x] 代码块不会被随意截断。
+- [x] 重复内容可检测。
 
 ## 6. 执行记录
-- 状态：未开始
-- 开始日期：
-- 完成日期：
+- 状态：✅ 已完成
+- 开始日期：2026-01-10
+- 完成日期：2026-01-10
 - 备注：
+  - 分块策略：按段落边界 + 句子边界切分
+  - 代码块保留完整性（≥MIN_CODE_LINES*20 字符）
+  - token 估算：中文字符 / 1.5 + 其他字符 / 4
+  - 测试结果：38 passed
 
 ## 7. 交接到下一阶段
-完成本阶段所有验收项后，记录可运行命令、测试结果、已知问题和下一阶段所需输入，再开始下一个 Stage。
+### 可运行命令
+```bash
+# 分块文档（需要先完成 Stage-02 的文档导入）
+poetry run python -c "from learn_system.loaders.import_docs import import_documents; ..."
+```
+
+### 测试结果
+- pytest: 38 passed（总计）
+- ruff check: All checks passed!
+- ruff format: 3 files reformatted
+
+### 已知问题
+- 暂未实现与向量存储的集成（Stage-04 处理）
+
+### 下一阶段所需输入
+- `data/processed/documents.jsonl` - 导入的文档数据
