@@ -19,6 +19,7 @@ class CLI:
         self.retriever: Retriever | None = None
         self.rag_engine: RAGEngine | None = None
         self._initialized = False
+        self.history: list[dict] = []
 
     def initialize(self) -> bool:
         """初始化组件"""
@@ -101,7 +102,9 @@ class CLI:
                 continue
 
             try:
-                response = self.rag_engine.ask(question)
+                response = self.rag_engine.ask(question, history=self.history[-6:])
+                self.history.append({"role": "user", "content": question})
+                self.history.append({"role": "assistant", "content": response.answer})
                 print()
                 print(response.format())
                 print()

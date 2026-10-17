@@ -98,3 +98,12 @@ data/
 storage/
 models/
 *.log
+
+# Backend (Django)
+backend/db.sqlite3
+backend/db.sqlite3-journal
+backend/db.sqlite3-wal
+
+# Frontend (Node)
+frontend/node_modules/
+frontend/dist/

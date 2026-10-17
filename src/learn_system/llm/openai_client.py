@@ -34,10 +34,24 @@ class OpenAIClient(BaseLLMClient):
         if self._client is None:
             try:
                 from openai import OpenAI
-
-                self._client = OpenAI(api_key=self._api_key, base_url=self._base_url)
             except ImportError as err:
-                raise ImportError("openai not installed. Install with: pip install openai") from err
+                raise ImportError(
+                    "openai not installed. Install with: pip install openai"
+                ) from err
+
+            try:
+                import httpx2 as _httpx
+            except ImportError:
+                import httpx as _httpx
+
+            # 禁用代理自动检测：避免误读系统代理（如 Clash 未运行时）导致请求超时
+            http_client = _httpx.Client(trust_env=False)
+            self._client = OpenAI(
+                api_key=self._api_key,
+                base_url=self._base_url,
+                http_client=http_client,
+                timeout=120.0,
+            )
 
     def generate(self, prompt: str, **kwargs) -> LLMResponse:
         """生成回复"""

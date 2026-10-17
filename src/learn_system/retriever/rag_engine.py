@@ -62,8 +62,19 @@ class RAGEngine:
         self.llm_client = llm_client
         self.min_relevance_score = min_relevance_score
 
-    def ask(self, question: str, top_k: int | None = None) -> RAGResponse:
-        """问答"""
+    def ask(
+        self,
+        question: str,
+        top_k: int | None = None,
+        history: list[dict] | None = None,
+    ) -> RAGResponse:
+        """问答
+
+        Args:
+            question: 用户问题
+            top_k: 检索结果数量
+            history: 多轮对话历史，格式 [{"role": "user"/"assistant", "content": str}, ...]
+        """
         results = self.retriever.retrieve(question, top_k)
 
         relevant = [r for r in results if r.score >= self.min_relevance_score]
@@ -77,7 +88,7 @@ class RAGEngine:
             )
 
         context = self._build_context(relevant)
-        prompt = self._build_prompt(question, context)
+        prompt = self._build_prompt(question, context, history)
         response = self.llm_client.generate(prompt)
         sources = self._extract_sources(relevant)
 
@@ -101,8 +112,21 @@ class RAGEngine:
 
         return "\n---\n".join(context_parts)
 
-    def _build_prompt(self, question: str, context: str) -> str:
+    def _build_prompt(
+        self, question: str, context: str, history: list[dict] | None = None
+    ) -> str:
         """构建提示词"""
+        history_section = ""
+        if history:
+            lines = []
+            for msg in history:
+                role = "用户" if msg.get("role") == "user" else "助手"
+                content = (msg.get("content") or "").strip()
+                if content:
+                    lines.append(f"{role}：{content}")
+            if lines:
+                history_section = "**对话历史：**\n" + "\n".join(lines) + "\n\n"
+
         return f"""你是一名 Python 官方文档助手。请只用中文回答，保留准确的英文标识符、函数名和代码。
 
 **回答规则：**
@@ -111,7 +135,7 @@ class RAGEngine:
 3. 需要引用资料时，请用 [1]、[2] 这样的编号标明出处。
 4. 回答要简洁、准确。
 
-**参考资料：**
+{history_section}**参考资料：**
 {context}
 
 **问题：**

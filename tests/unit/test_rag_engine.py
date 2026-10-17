@@ -73,6 +73,21 @@ class TestRAGEngine:
         assert "Test question?" in prompt
         assert "Some context" in prompt
 
+    def test_build_prompt_with_history(self, mock_retriever, mock_llm):
+        engine = RAGEngine(mock_retriever, mock_llm)
+        prompt = engine._build_prompt(
+            "Question?",
+            "Some context",
+            [
+                {"role": "user", "content": "前一个问题"},
+                {"role": "assistant", "content": "前一个回答"},
+            ],
+        )
+
+        assert "对话历史" in prompt
+        assert "前一个问题" in prompt
+        assert "前一个回答" in prompt
+
 
 class TestRAGResponse:
     def test_format_with_sources(self):
