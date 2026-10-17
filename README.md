@@ -72,20 +72,31 @@ LearnSystem/
 │   ├── 设计文档.md
 │   ├── 整体开发计划.md
 │   └── stages/           # 各阶段计划
+├── backend/              # Django + DRF 后端
+│   ├── config/           # 配置与路由
+│   └── chat/             # 问答 API
+├── frontend/             # Vue3 + Vite 前端
+│   └── src/              # 聊天界面
 ├── pyproject.toml        # 项目配置
 └── .env.example          # 环境变量示例
 ```
 
 ## 开发阶段
 
-| Stage | 名称 | 说明 |
+| Stage | 名称 | 状态 |
 |-------|------|------|
-| Stage-01 | 项目初始化 | Poetry 项目、目录、配置与测试框架 |
-| Stage-02 | 文档导入 | HTML 文档导入、解析器 |
-| Stage-03 | 文本分块 | Chunker、分块产物 |
-| Stage-04 | 向量索引 | Embedding 接口、Chroma 索引 |
-| Stage-05 | 基础问答 | Retriever、LLM Client、CLI |
-| Stage-06~12 | 后续优化 | 评估、混合检索、Web UI 等 |
+| Stage-01 | 项目初始化 | ✅ |
+| Stage-02 | 文档导入与解析 | ✅ |
+| Stage-03 | 文本分块 | ✅ |
+| Stage-04 | Embedding 与 Chroma 索引 | ✅ |
+| Stage-05 | 基础 RAG 问答 | ✅ |
+| Stage-06 | 评估集与检索基线 | ✅ Recall@5=0.7667 |
+| Stage-07 | BM25 + RRF 混合检索 | ✅ 结论：不启用（略逊于纯向量） |
+| Stage-08 | 查询改写与重排 | ✅ 结论：边际收益不启用 |
+| Stage-09 | 服务化（HTTP API） | ✅ Django DRF |
+| Stage-10 | Web 聊天界面 | ✅ Vue3 |
+| Stage-11 | 文档更新与索引管理 | ✅ |
+| Stage-12 | 部署整理 | ✅ |
 
 ## 使用方法
 
@@ -126,6 +137,53 @@ poetry run python -m learn_system.cli.evaluate --top-k 5
 poetry run pytest -v
 poetry run pytest --cov=learn_system
 ```
+
+## Web 服务（Django + Vue3）
+
+### 启动后端
+
+在仓库根目录执行（确保能读到 `.env`）：
+
+```bash
+poetry run python backend/manage.py migrate
+poetry run python backend/manage.py runserver 0.0.0.0:8000
+```
+
+接口：
+
+- `POST /api/chat/` 提问（带 `conversation_id` 支持多轮）
+- `GET/POST /api/conversations/` 会话
+- `GET /api/health/` 健康检查
+
+### 启动前端
+
+```bash
+cd frontend
+npm install
+npm run dev    # 访问 http://localhost:5173
+```
+
+## 环境变量
+
+见 `.env.example`。关键项：
+
+- `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL`：LLM 配置（问答生成）
+- `EMBEDDING_MODEL`：本地 embedding 模型路径（默认 bge-m3）
+- `CHROMA_DIR`：向量索引目录
+- `LLM_TEMPERATURE`：LLM 采样温度（事实问答建议 0.2）
+
+## 备份与恢复
+
+需要备份的数据（均为本地文件，`.gitignore` 已忽略）：
+
+| 数据 | 路径 |
+|---|---|
+| 解析后的文档 | `data/processed/documents.jsonl` |
+| 分块产物 | `data/processed/chunks.jsonl` |
+| 向量索引 | `storage/chroma/` |
+| 对话历史 | `backend/db.sqlite3` |
+
+备份直接复制这些目录/文件即可；恢复时拷回原位置。原始文档（`data/raw/`）与模型（`models/`）可重新下载，也可一并备份。
 
 ## 许可证
 
