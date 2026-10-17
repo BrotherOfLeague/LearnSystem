@@ -1,11 +1,18 @@
 from django.conf import settings as django_settings
 from rest_framework import status, viewsets
+from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from chat.models import Conversation, Message
 from chat.serializers import ConversationSerializer
 from chat.services import get_engine
+
+
+@api_view(["GET"])
+def health(request):
+    """健康检查"""
+    return Response({"status": "ok", "service": "learn-system-backend"})
 
 
 class ConversationViewSet(viewsets.ModelViewSet):

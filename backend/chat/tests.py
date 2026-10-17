@@ -37,3 +37,8 @@ class ChatApiTests(TestCase):
         resp = self.client.get(reverse("conversation-list"))
         assert resp.status_code == status.HTTP_200_OK
         assert resp.json() == []
+
+    def test_health_endpoint(self):
+        resp = self.client.get(reverse("health"))
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.json()["status"] == "ok"

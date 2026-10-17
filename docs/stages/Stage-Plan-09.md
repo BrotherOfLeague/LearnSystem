@@ -1,29 +1,33 @@
-# Stage-Plan-09：FastAPI 服务化
+# Stage-Plan-09：服务化（HTTP API）
 
 ## 1. 目标
-FastAPI 服务化，为后续阶段提供可验证的基础能力。
+把 RAG 能力暴露为 HTTP API，客户端可通过 HTTP 提问并获得回答与引用。
 
 ## 2. 前置条件
-Stage-Plan-08 已通过验收；总体需求和设计文档已阅读。
+Stage-Plan-05 已通过验收。
 
 ## 3. 任务清单
-1. 将 RAGService 与 CLI 解耦。
-2. 定义健康检查和问答端点。
-3. 使用 Pydantic 定义请求响应。
-4. 增加 API 集成测试。
+1. [x] 将 RAG 能力与 CLI 解耦（服务层单例）。
+2. [x] 增加健康检查与问答端点。
+3. [x] 定义请求/响应模型。
+4. [x] 处理参数校验与异常。
+5. [x] 增加接口测试。
 
-## 4. 涉及文件
-以本阶段实际实现为准。优先沿用 `设计文档.md` 中定义的目录与模块职责；如需偏离，应记录原因并同步更新设计文档。
+## 4. 技术选型说明（偏离原计划）
+原计划使用 FastAPI，实际采用 **Django + DRF**（用户指定），接口能力等价：
+- `POST /api/chat/` 问答（多轮）
+- `GET/POST /api/conversations/` 会话
+- `GET /api/health/` 健康检查
 
-## 5. 测试与验收
-- [ ] HTTP 问答可用。
-- [ ] 错误响应结构清晰。
+## 5. 涉及文件
+- `backend/config/` - Django 配置与路由
+- `backend/chat/` - models / serializers / views / urls / services / tests
 
-## 6. 执行记录
-- 状态：未开始
-- 开始日期：
-- 完成日期：
-- 备注：
+## 6. 测试与验收
+- [x] 客户端可通过 HTTP 发送问题并接收回答与引用。
+- [x] 健康检查可用。
+- [x] 接口测试通过（4 tests）。
 
-## 7. 交接到下一阶段
-完成本阶段所有验收项后，记录可运行命令、测试结果、已知问题和下一阶段所需输入，再开始下一个 Stage。
+## 7. 执行记录
+- 状态：✅ 已完成（Django DRF 实现）
+- 测试结果：backend 接口测试 4 passed，全套 pytest 79 passed
