@@ -53,3 +53,31 @@ def test_clear_then_reuse():
 
     store.add_chunks([_chunk("c2", "text2", "https://b")], [[0.1] * 8])
     assert store.count() == 1
+
+
+def test_delete_by_document_ids():
+    store = ChromaVectorStore()
+    c1 = Chunk(
+        chunk_id="c1",
+        document_id="doc_a",
+        chunk_index=0,
+        text="t1",
+        section_path=["T"],
+        source_url="https://a",
+    )
+    c2 = Chunk(
+        chunk_id="c2",
+        document_id="doc_b",
+        chunk_index=0,
+        text="t2",
+        section_path=["T"],
+        source_url="https://b",
+    )
+    store.add_chunks([c1, c2], [[0.1] * 8, [0.2] * 8])
+
+    assert store.count() == 2
+    assert store.list_document_ids() == {"doc_a", "doc_b"}
+
+    store.delete_by_document_ids(["doc_a"])
+    assert store.count() == 1
+    assert store.list_document_ids() == {"doc_b"}

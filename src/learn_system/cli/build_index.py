@@ -83,6 +83,14 @@ def build_index(
 
     if rebuild:
         store.clear()
+    else:
+        # 增量：删除已不在当前文档集中的陈旧分块
+        current_ids = {c.document_id for c in all_chunks}
+        stale_ids = store.list_document_ids() - current_ids
+        if stale_ids:
+            store.delete_by_document_ids(sorted(stale_ids))
+            stats["removed_documents"] = len(stale_ids)
+            logger.info(f"清理陈旧文档分块: {len(stale_ids)} 个文档")
 
     batch_size = settings.embedding_batch_size
     for i in range(0, len(all_chunks), batch_size):
@@ -94,6 +102,19 @@ def build_index(
         logger.info(f"已写入 {stats['embedded']}/{len(all_chunks)} 个分块")
 
     return stats
+
+
+def show_status() -> None:
+    """显示索引状态"""
+    store = ChromaVectorStore(persist_dir=settings.chroma_dir)
+    print("=" * 50)
+    print("索引状态")
+    print("=" * 50)
+    print(f"分块数量: {store.count()}")
+    print(f"文档数量: {len(store.list_document_ids())}")
+    print(f"Embedding 模型: {settings.embedding_model}")
+    print(f"Collection: {store.collection_name}")
+    print("=" * 50)
 
 
 def main() -> None:
@@ -132,8 +153,17 @@ def main() -> None:
         default=None,
         help="覆盖配置中的 embedding 模型",
     )
+    parser.add_argument(
+        "--status",
+        action="store_true",
+        help="查看索引状态（不构建）",
+    )
 
     args = parser.parse_args()
+
+    if args.status:
+        show_status()
+        return
 
     stats = build_index(
         documents_file=args.documents,

@@ -109,6 +109,28 @@ class ChromaVectorStore(BaseVectorStore):
         assert self._collection is not None
         return self._collection.count()
 
+    def delete_by_document_ids(self, document_ids: list[str]) -> None:
+        """按文档 ID 删除分块"""
+        if not document_ids:
+            return
+        self._ensure_client()
+        assert self._collection is not None
+        for i in range(0, len(document_ids), 100):
+            batch = document_ids[i : i + 100]
+            self._collection.delete(where={"document_id": {"$in": batch}})
+        logger.info(f"Deleted chunks for {len(document_ids)} documents")
+
+    def list_document_ids(self) -> set[str]:
+        """返回索引中所有唯一的 document_id"""
+        self._ensure_client()
+        assert self._collection is not None
+        result = self._collection.get(include=["metadatas"])
+        ids: set[str] = set()
+        for metadata in result.get("metadatas", []):
+            if metadata and metadata.get("document_id"):
+                ids.add(metadata["document_id"])
+        return ids
+
     def clear(self) -> None:
         """清空向量存储"""
         if self._client is not None and self._collection is not None:

@@ -38,6 +38,10 @@ class VectorStore(Protocol):
         """返回分块数量"""
         ...
 
+    def delete_by_document_ids(self, document_ids: list[str]) -> None:
+        """按文档 ID 删除分块"""
+        ...
+
     def clear(self) -> None:
         """清空向量存储"""
         ...
@@ -59,6 +63,11 @@ class BaseVectorStore(ABC):
     @abstractmethod
     def count(self) -> int:
         """返回分块数量"""
+        pass
+
+    @abstractmethod
+    def delete_by_document_ids(self, document_ids: list[str]) -> None:
+        """按文档 ID 删除分块"""
         pass
 
     @abstractmethod

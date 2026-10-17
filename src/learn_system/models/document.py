@@ -27,6 +27,7 @@ class ParsedDocument:
     code_blocks: list[str] = field(default_factory=list)  # 代码块列表
     source_url: str | None = None  # 官方 URL
     source_path: str = ""  # 本地相对路径
+    source_hash: str = ""  # 原始文件内容哈希（用于增量导入检测）
     version: str = "3.15"  # Python 版本
     language: str = "en"  # 文档语言
 
