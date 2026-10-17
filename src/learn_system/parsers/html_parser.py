@@ -1,6 +1,6 @@
 """HTML 解析器模块
 
-负责解析 Python 官方 HTML 文档，提取标题、正文、代码块等信息。
+负责解析 Python 官方 HTML 文档，提取标题、章节路径、正文与代码块。
 """
 
 import hashlib
@@ -14,41 +14,58 @@ from learn_system.models.document import Document, ParsedDocument, ParseResult
 
 logger = logging.getLogger(__name__)
 
+# 内容区域选择器（按优先级）
+CONTENT_SELECTORS = [
+    "div.body",
+    "article",
+    "main",
+    "div.document",
+    "#documentation",
+    "#content",
+]
+
+# 需要整体移除的噪声元素
+NOISE_SELECTORS = [
+    "script",
+    "style",
+    "noscript",
+    "header",
+    "footer",
+    "nav",
+    "aside",
+    "div.toc",
+    "div.contents",
+    "div.toctree-wrapper",
+    "div.sidebar",
+    "div.related",
+]
+
+# 作为独立块处理的标签（不递归展开，避免嵌套重复）
+BLOCK_TAGS = {
+    "p",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "li",
+    "dt",
+    "dd",
+    "figcaption",
+    "caption",
+    "th",
+    "td",
+    "blockquote",
+}
+
 
 class HtmlParser:
     """HTML 文档解析器"""
 
-    # 导航元素的选择器（应被移除）
-    NAV_SELECTORS = [
-        "nav",
-        "header",
-        "footer",
-        "sidebar",
-        "menu",
-        "breadcrumb",
-        "related",
-        "document-navigation",
-        "lang-nav",
-        "sphinxsidebar",
-    ]
-
-    # 内容区域选择器
-    CONTENT_SELECTORS = [
-        "article",
-        "main",
-        "div.body",
-        "div.section",
-        "div.document",
-        "#documentation",
-        "#content",
-        ".content",
-        ".section",
-    ]
-
     def __init__(self):
-        """初始化解析器"""
-        self.nav_selector = ", ".join(self.NAV_SELECTORS)
-        self.content_selector = ", ".join(self.CONTENT_SELECTORS)
+        self.content_selector = ", ".join(CONTENT_SELECTORS)
+        self.noise_selector = ", ".join(NOISE_SELECTORS)
 
     def parse(self, doc: Document) -> ParseResult:
         """解析 HTML 文档"""
@@ -56,9 +73,17 @@ class HtmlParser:
             html_content = doc.source_path.read_text(encoding="utf-8", errors="replace")
             soup = BeautifulSoup(html_content, "lxml")
 
-            self._remove_nav_elements(soup)
-            title = self._extract_title(soup)
+            if self._is_redirect_stub(soup):
+                return ParseResult(
+                    success=False,
+                    error="redirect stub",
+                    source_path=str(doc.source_path),
+                )
+
             section_path = self._extract_section_path(soup)
+            title = self._extract_title(soup)
+            self._remove_noise(soup)
+
             text, code_blocks = self._extract_content(soup)
             content_hash = self._compute_hash(text)
             doc_id = self._generate_doc_id(doc.source_path, content_hash)
@@ -74,86 +99,107 @@ class HtmlParser:
                 version=doc.version,
                 language=doc.language,
             )
-
             return ParseResult(success=True, document=parsed, source_path=str(doc.source_path))
 
         except Exception as e:
             logger.error(f"解析失败 {doc.source_path}: {e}")
             return ParseResult(success=False, error=str(e), source_path=str(doc.source_path))
 
-    def _remove_nav_elements(self, soup: BeautifulSoup) -> None:
-        """移除导航元素"""
-        for selector in self.NAV_SELECTORS:
-            for element in soup.select(selector):
-                element.decompose()
+    def _is_redirect_stub(self, soup: BeautifulSoup) -> bool:
+        meta = soup.find("meta", attrs={"http-equiv": lambda v: v and v.lower() == "refresh"})
+        return meta is not None
+
+    def _remove_noise(self, soup: BeautifulSoup) -> None:
+        for element in soup.select(self.noise_selector):
+            element.decompose()
+
+    def _clean_heading(self, text: str) -> str:
+        text = text.replace("¶", " ")
+        return re.sub(r"\s+", " ", text).strip()
+
+    def _select_content(self, soup: BeautifulSoup):
+        for selector in CONTENT_SELECTORS:
+            content = soup.select_one(selector)
+            if content is not None:
+                return content
+        return soup.find("body") or soup
 
     def _extract_title(self, soup: BeautifulSoup) -> str:
-        """提取页面标题"""
-        h1 = soup.find("h1")
-        if h1:
-            return h1.get_text(strip=True)
+        content = self._select_content(soup)
+        h1 = content.find("h1")
+        if h1 is not None:
+            return self._clean_heading(h1.get_text(" ", strip=True))
+
         title_tag = soup.find("title")
-        if title_tag:
-            return title_tag.get_text(strip=True)
+        if title_tag is not None:
+            return self._clean_heading(title_tag.get_text(" ", strip=True))
         return "Untitled"
 
     def _extract_section_path(self, soup: BeautifulSoup) -> list[str]:
-        """提取章节路径"""
-        path = []
-        breadcrumb = soup.find("nav", class_=re.compile(r"breadcrumb")) or soup.find(
-            "ul", class_=re.compile(r"breadcrumb")
-        )
-        if breadcrumb:
-            for item in breadcrumb.find_all("li"):
-                text = item.get_text(strip=True)
-                if text:
+        """从面包屑导航提取章节路径"""
+        related = soup.select_one("div.related")
+        if related is not None:
+            path = []
+            for a in related.select("a"):
+                text = self._clean_heading(a.get_text(" ", strip=True))
+                if text and text not in {"index", "modules", "next", "previous", "Python"}:
                     path.append(text)
-        if not path:
-            for i in range(1, 7):
-                headers = soup.find_all(f"h{i}")
-                for header in headers:
-                    text = header.get_text(strip=True)
-                    if text and text != "Untitled":
-                        path.append(text)
-                        break
-                if path:
-                    break
-        return path
+            path = [p for p in path if not re.match(r"^\d+\.\d+(\.\d+)? Documentation$", p)]
+            if path:
+                return path
+
+        content = self._select_content(soup)
+        h1 = content.find("h1")
+        if h1 is not None:
+            return [self._clean_heading(h1.get_text(" ", strip=True))]
+        return []
 
     def _extract_content(self, soup: BeautifulSoup) -> tuple[str, list[str]]:
-        """提取正文内容和代码块"""
-        content = None
-        for selector in self.CONTENT_SELECTORS:
-            content = soup.select_one(selector)
-            if content:
-                break
-        if not content:
-            content = soup.find("body") or soup
+        content = self._select_content(soup)
 
-        for tag in content.find_all(["script", "style", "noscript"]):
-            tag.decompose()
+        blocks: list[tuple[str, str]] = []
+        self._collect_blocks(content, blocks)
 
-        code_blocks = []
-        for pre in content.find_all("pre"):
-            code_text = pre.get_text(strip=True)
-            if code_text:
-                code_blocks.append(code_text)
+        text_parts: list[str] = []
+        code_blocks: list[str] = []
+        for kind, value in blocks:
+            if kind == "code":
+                code = self._clean_code(value)
+                if not code:
+                    continue
+                code_blocks.append(code)
+                text_parts.append(f"```\n{code}\n```")
+            else:
+                clean = re.sub(r"[ \t\r\f\v]+", " ", value.replace("¶", " ")).strip()
+                if clean:
+                    text_parts.append(clean)
 
-        text_parts = []
-        for element in content.descendants:
-            if isinstance(element, NavigableString):
-                text = str(element).strip()
+        return "\n\n".join(text_parts), code_blocks
+
+    def _collect_blocks(self, node, out: list[tuple[str, str]]) -> None:
+        for child in node.children:
+            if isinstance(child, NavigableString):
+                continue
+            if not isinstance(child, Tag):
+                continue
+            if child.name == "pre":
+                out.append(("code", child.get_text()))
+                continue
+            if child.name in BLOCK_TAGS:
+                text = child.get_text(" ", strip=True)
                 if text:
-                    text_parts.append(text)
-            elif isinstance(element, Tag):
-                if element.name in ["p", "div", "br", "h1", "h2", "h3", "h4", "h5", "h6"]:
-                    text_parts.append("\n")
+                    out.append(("text", text))
+                continue
+            self._collect_blocks(child, out)
 
-        text = " ".join(text_parts)
-        text = re.sub(r"\n\s*\n", "\n\n", text)
-        text = re.sub(r"\s+", " ", text)
-        text = text.strip()
-        return text, code_blocks
+    def _clean_code(self, code: str) -> str:
+        """保留代码换行与缩进，仅去除首尾空行和行尾空格"""
+        lines = [line.rstrip() for line in code.splitlines()]
+        while lines and not lines[0].strip():
+            lines.pop(0)
+        while lines and not lines[-1].strip():
+            lines.pop()
+        return "\n".join(lines)
 
     def _compute_hash(self, content: str) -> str:
         """计算内容哈希（用于去重）"""

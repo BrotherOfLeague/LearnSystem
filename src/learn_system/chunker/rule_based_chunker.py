@@ -1,140 +1,153 @@
-"""基于规则的文档分块器"""
+"""基于规则的文档分块器
+
+按段落与代码块边界切分，支持目标长度、最大长度与重叠配置。
+"""
 
 import hashlib
 import re
+from dataclasses import dataclass
 
 from learn_system.models.chunk import Chunk, ChunkingResult
 from learn_system.models.document import ParsedDocument
 
-MIN_SIZE = 100
-MAX_SIZE = 1200
+DEFAULT_TARGET_SIZE = 800
+DEFAULT_MAX_SIZE = 1200
+DEFAULT_OVERLAP = 120
+DEFAULT_MIN_SIZE = 100
 MIN_CODE = 4
 
 
+@dataclass
+class _Segment:
+    kind: str  # "text" | "code"
+    content: str
+
+
 class RuleBasedChunker:
-    def __init__(self, min_size: int = MIN_SIZE, max_size: int = MAX_SIZE):
-        self.min_size = min_size
-        self.max_size = max_size
+    """基于规则的分块器"""
+
+    def __init__(
+        self,
+        target_size: int = DEFAULT_TARGET_SIZE,
+        max_size: int = DEFAULT_MAX_SIZE,
+        overlap: int = DEFAULT_OVERLAP,
+        min_size: int = DEFAULT_MIN_SIZE,
+    ):
+        self.max_size = max(1, max_size)
+        self.target_size = max(1, min(target_size, self.max_size))
+        self.overlap = max(0, min(overlap, self.max_size // 2))
+        self.min_size = max(1, min_size)
 
     def chunk_document(self, doc: ParsedDocument) -> ChunkingResult:
         result = ChunkingResult(document_id=doc.document_id, total_chunks=0)
-        if len(doc.text) < self.min_size and not doc.code_blocks:
-            result.chunks.append(self._make(doc, doc.text, 0, []))
-            result.total_chunks = 1
-            return result
+        segments = self._split(doc)
 
-        segs = self._split(doc)
-        cur_text = ""
-        cur_codes: list[str] = []
+        cur_text: list[str] = []
+        cur_len = 0
         idx = 0
         seen: set[str] = set()
 
-        for t, c in segs:
-            if t == "code" and len(c) >= MIN_CODE * 20:
-                if cur_text.strip():
-                    self._add(doc, cur_text, idx, cur_codes, result, seen)
-                    idx += 1
-                    cur_text = ""
-                    cur_codes = []
-                self._add(doc, f"```\n{c}\n```", idx, [c], result, seen)
-                idx += 1
-            elif t == "code":
-                cur_codes.append(c)
-            else:
-                c = c.strip()
-                if not c:
-                    continue
-                if len(cur_text) + len(c) < self.max_size:
-                    cur_text = (cur_text + "\n" + c) if cur_text else c
-                else:
-                    if cur_text.strip():
-                        self._add(doc, cur_text, idx, cur_codes, result, seen)
-                        idx += 1
-                        cur_text = ""
-                        cur_codes = []
-                    if len(c) > self.max_size:
-                        subs = self._split_big(doc, c, idx, seen)
-                        result.chunks.extend(subs)
-                        idx += len(subs)
-                    else:
-                        cur_text = c
+        def emit(text: str, codes: list[str]) -> None:
+            nonlocal idx
+            text = text.strip()
+            if not text:
+                return
+            h = hashlib.md5(text.encode("utf-8")).hexdigest()
+            if h in seen:
+                result.duplicate_hashes.add(h)
+                return
+            seen.add(h)
+            result.chunks.append(self._make(doc, text, idx, codes))
+            idx += 1
 
-        if cur_text.strip():
-            self._add(doc, cur_text, idx, cur_codes, result, seen)
+        for seg in segments:
+            if seg.kind == "code":
+                if cur_text:
+                    emit("\n\n".join(cur_text), [])
+                    cur_text, cur_len = [], 0
+                code = seg.content
+                if code:
+                    emit(code, [code])
+                continue
+
+            text = seg.content.strip()
+            if not text:
+                continue
+
+            if len(text) > self.max_size:
+                if cur_text:
+                    emit("\n\n".join(cur_text), [])
+                    cur_text, cur_len = [], 0
+                for piece in self._split_big(text):
+                    emit(piece, [])
+                continue
+
+            if cur_len + len(text) + 2 <= self.max_size:
+                cur_text.append(text)
+                cur_len += len(text) + 2
+            else:
+                emit("\n\n".join(cur_text), [])
+                cur_text, cur_len = [text], len(text)
+
+        if cur_text:
+            emit("\n\n".join(cur_text), [])
+
+        self._merge_small(result)
         result.total_chunks = len(result.chunks)
         return result
 
-    def _add(
-        self,
-        doc: ParsedDocument,
-        text: str,
-        idx: int,
-        codes: list[str],
-        result: ChunkingResult,
-        seen: set[str],
-    ) -> None:
-        chunk = self._make(doc, text, idx, codes)
-        if chunk.content_hash in seen:
-            result.duplicate_hashes.add(chunk.content_hash)
-        else:
-            seen.add(chunk.content_hash)
-            result.chunks.append(chunk)
-
-    def _split(self, doc: ParsedDocument) -> list[tuple[str, str]]:
-        segs: list[tuple[str, str]] = []
+    def _split(self, doc: ParsedDocument) -> list[_Segment]:
+        segments: list[_Segment] = []
         for para in re.split(r"\n\s*\n", doc.text):
             para = para.strip()
             if not para:
                 continue
-            if "```" in para or "`" in para:
-                for pt, pc in self._split_code(para):
-                    if pc.strip():
-                        segs.append((pt, pc))
-            else:
-                segs.append(("text", para))
-        for code in doc.code_blocks:
-            if len(code) >= MIN_CODE * 20:
-                segs.append(("code", code))
-        return segs
+            segments.extend(self._split_fenced(para))
 
-    def _split_code(self, text: str) -> list[tuple[str, str]]:
-        parts: list[tuple[str, str]] = []
+        # 兼容未写入正文的代码块（如单元测试直接构造的文档）
+        for code in doc.code_blocks:
+            if code and code not in doc.text:
+                segments.append(_Segment("code", code))
+        return segments
+
+    def _split_fenced(self, text: str) -> list[_Segment]:
+        parts: list[_Segment] = []
         last = 0
-        for m in re.finditer(r"```[\s\S]*?```|`[^`]+`", text):
+        pattern = re.compile(r"```[^\n]*\n(.*?)```", re.DOTALL)
+        for m in pattern.finditer(text):
             before = text[last : m.start()].strip()
             if before:
-                parts.append(("text", before))
-            matched = m.group()
-            parts.append(("code" if matched.startswith("```") else "inline", matched.strip("`\n")))
+                parts.append(_Segment("text", before))
+            parts.append(_Segment("code", m.group(1).strip("\n")))
             last = m.end()
         remaining = text[last:].strip()
         if remaining:
-            parts.append(("text", remaining))
+            parts.append(_Segment("text", remaining))
         return parts
 
-    def _split_big(self, doc: ParsedDocument, text: str, start: int, seen: set[str]) -> list[Chunk]:
-        chunks: list[Chunk] = []
-        # 按空格分割成词组
+    def _split_big(self, text: str) -> list[str]:
+        pieces: list[str] = []
         words = text.split()
+        if not words:
+            return [text]
+
         current = ""
-        idx = start
         for word in words:
-            if len(current) + len(word) + 1 < self.max_size:
-                current = (current + " " + word) if current else word
-            else:
-                if current.strip():
-                    chunks.append(self._make(doc, current, idx, []))
-                    idx += 1
+            if not current:
                 current = word
+            elif len(current) + len(word) + 1 < self.max_size:
+                current += " " + word
+            else:
+                pieces.append(current)
+                keep = current.split()[-(max(1, self.overlap // 5)) :]
+                current = " ".join(keep) + " " + word
+
         if current.strip():
-            chunks.append(self._make(doc, current, idx, []))
-        return chunks
+            pieces.append(current.strip())
+        return pieces
 
     def _make(self, doc: ParsedDocument, text: str, idx: int, codes: list[str]) -> Chunk:
-        text = text.strip()
-        h = hashlib.md5(text.encode()).hexdigest()
-        zh = len(re.findall(r"[\u4e00-\u9fff]", text))
-        tokens = int(zh / 1.5 + (len(text) - zh) / 4)
+        h = hashlib.md5(text.encode("utf-8")).hexdigest()
         return Chunk(
             chunk_id=f"{doc.document_id}_chunk_{idx:04d}",
             document_id=doc.document_id,
@@ -147,5 +160,32 @@ class RuleBasedChunker:
             version=doc.version,
             content_hash=h,
             char_count=len(text),
-            token_estimate=tokens,
+            token_estimate=self._count_tokens(text),
         )
+
+    def _merge_small(self, result: ChunkingResult) -> None:
+        if len(result.chunks) < 2:
+            return
+        merged: list[Chunk] = []
+        for chunk in result.chunks:
+            prev = merged[-1] if merged else None
+            if (
+                prev is not None
+                and chunk.char_count < self.min_size
+                and not chunk.code_blocks
+                and not prev.code_blocks
+                and prev.char_count + chunk.char_count + 2 <= self.max_size
+            ):
+                combined = prev.text + "\n\n" + chunk.text
+                prev.text = combined
+                prev.char_count = len(combined)
+                prev.content_hash = hashlib.md5(combined.encode("utf-8")).hexdigest()
+                prev.token_estimate = self._count_tokens(combined)
+                continue
+            merged.append(chunk)
+        result.chunks = merged
+
+    @staticmethod
+    def _count_tokens(text: str) -> int:
+        zh = len(re.findall(r"[\u4e00-\u9fff]", text))
+        return int(zh / 1.5 + (len(text) - zh) / 4)

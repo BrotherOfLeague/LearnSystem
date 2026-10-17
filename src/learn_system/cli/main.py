@@ -2,8 +2,6 @@
 
 import logging
 
-import questionary
-
 from learn_system.config.settings import settings
 from learn_system.embedding.local import LocalEmbeddingProvider
 from learn_system.llm.openai_client import OpenAIClient
@@ -25,6 +23,10 @@ class CLI:
     def initialize(self) -> bool:
         """初始化组件"""
         try:
+            if not settings.llm_api_key:
+                logger.error("未配置 LLM_API_KEY，请在 .env 中设置")
+                return False
+
             # 初始化 Embedding
             embedding_provider = LocalEmbeddingProvider(
                 model_name=settings.embedding_model,
@@ -47,6 +49,7 @@ class CLI:
                 api_key=settings.llm_api_key,
                 base_url=settings.llm_base_url,
                 model=settings.llm_model,
+                temperature=settings.llm_temperature,
             )
 
             # 初始化 RAG Engine
@@ -66,7 +69,7 @@ class CLI:
         """运行交互式问答"""
         if not self._initialized:
             if not self.initialize():
-                print("初始化失败，请检查配置和依赖")
+                print("初始化失败，请检查 .env 配置（需要 LLM_API_KEY）")
                 return
 
         print("=" * 60)
@@ -77,32 +80,31 @@ class CLI:
 
         while True:
             try:
-                question = questionary.text("请输入您的问题:").ask()
+                question = input("请输入您的问题: ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\n再见！")
+                break
 
-                if not question:
-                    continue
+            if not question:
+                continue
 
-                if question.lower() in ["quit", "exit", "q", "退出"]:
-                    print("再见！")
-                    break
+            if question.lower() in ["quit", "exit", "q", "退出"]:
+                print("再见！")
+                break
 
-                if question.lower() in ["help", "帮助"]:
-                    self._show_help()
-                    continue
+            if question.lower() in ["help", "帮助"]:
+                self._show_help()
+                continue
 
-                if question.lower() in ["stats", "统计"]:
-                    self._show_stats()
-                    continue
+            if question.lower() in ["stats", "统计"]:
+                self._show_stats()
+                continue
 
-                # 回答问题
+            try:
                 response = self.rag_engine.ask(question)
                 print()
                 print(response.format())
                 print()
-
-            except KeyboardInterrupt:
-                print("\n再见！")
-                break
             except Exception as err:
                 logger.error(f"处理问题失败: {err}")
                 print(f"抱歉，处理您的问题时出现错误: {err}")
@@ -122,16 +124,18 @@ class CLI:
         """显示统计信息"""
         if self.retriever:
             count = self.retriever.count()
-            print(f"索引中的文档块数量: {count}")
+            if count == 0:
+                print("索引为空，请先运行构建索引命令")
+            else:
+                print(f"索引中的文档块数量: {count}")
         else:
             print("尚未初始化")
 
 
-def main():
+def main() -> None:
     """主入口"""
-    logging.basicConfig(level=logging.INFO)
-    cli = CLI()
-    cli.run()
+    logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
+    CLI().run()
 
 
 if __name__ == "__main__":

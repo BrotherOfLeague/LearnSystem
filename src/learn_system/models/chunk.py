@@ -15,7 +15,7 @@ class Chunk:
     section_path: list[str] = field(default_factory=list)  # 章节路径
     source_url: str | None = None  # 来源 URL
     source_path: str = ""  # 本地路径
-    version: str = "3.12"  # Python 版本
+    version: str = "3.15"  # Python 版本
     content_hash: str = ""  # 内容哈希
     char_count: int = 0  # 字符数
     token_estimate: int = 0  # token 估计数
@@ -24,7 +24,8 @@ class Chunk:
         """生成用于 embedding 的文本"""
         parts = [self.text]
         for block in self.code_blocks:
-            parts.append(f"\n```\n{block}\n```")
+            if block and block not in self.text:
+                parts.append(f"\n```\n{block}\n```")
         return "\n".join(parts)
 
     def to_metadata(self) -> dict:

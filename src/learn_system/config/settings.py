@@ -23,7 +23,7 @@ class AppSettings(BaseSettings):
     app_env: str = Field(default="dev", description="应用环境：dev, test, prod")
 
     # Python 文档版本
-    python_docs_version: str = Field(default="3.12", description="Python 文档版本")
+    python_docs_version: str = Field(default="3.15", description="Python 文档版本")
 
     # 数据目录
     docs_source_dir: Path = Field(default=Path("./data/raw"), description="原始文档目录")
@@ -40,6 +40,7 @@ class AppSettings(BaseSettings):
     llm_api_key: str | None = Field(default=None, description="LLM API Key")
     llm_base_url: str | None = Field(default=None, description="LLM API Base URL")
     llm_model: str = Field(default="gpt-4o-mini", description="LLM 模型名称")
+    llm_temperature: float = Field(default=0.7, description="LLM 采样温度")
 
     # 检索配置
     retrieval_top_k: int = Field(default=8, description="检索返回结果数量")

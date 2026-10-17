@@ -12,13 +12,14 @@ class TestAppSettings:
     """AppSettings 测试类"""
 
     def test_default_values(self):
-        """测试默认值"""
-        settings = AppSettings()
+        """测试默认值（禁用 .env 文件，避免受本地配置影响）"""
+        settings = AppSettings(_env_file=None)
 
         assert settings.app_env == "dev"
-        assert settings.python_docs_version == "3.12"
+        assert settings.python_docs_version == "3.15"
         assert settings.embedding_provider == "local"
         assert settings.llm_provider == "openai"
+        assert settings.llm_temperature == 0.7
         assert settings.retrieval_top_k == 8
         assert settings.chunk_target_size == 800
         assert settings.chunk_overlap == 120

@@ -1,10 +1,11 @@
 """文档导入命令
 
-将 Python 官方 HTML 文档导入到处理后的数据目录。
+将 Python 官方 HTML 文档导入到处理后的数据目录（JSONL）。
 """
 
 import json
 import logging
+from dataclasses import asdict
 from pathlib import Path
 
 from learn_system.loaders.document_loader import DocumentLoader
@@ -37,16 +38,16 @@ def import_documents(
     total_files = loader.count_files()
     logger.info(f"开始导入 {total_files} 个文档...")
 
-    documents = []
+    records: list[dict] = []
 
     for i, doc in enumerate(loader.load_documents(), 1):
         stats.total_files += 1
 
         result = parser.parse(doc)
 
-        if result.success and result.document:
+        if result.success and result.document is not None:
             stats.success_count += 1
-            documents.append(result.document)
+            records.append(asdict(result.document))
 
             if i % 100 == 0:
                 logger.info(f"进度: {i}/{total_files} ({100 * i / total_files:.1f}%)")
@@ -58,8 +59,8 @@ def import_documents(
     # 保存文档到 JSONL 文件
     output_file = output_dir / "documents.jsonl"
     with open(output_file, "w", encoding="utf-8") as f:
-        for doc in documents:
-            f.write(doc.model_dump_json() + "\n")
+        for record in records:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
     logger.info(f"文档已保存到: {output_file}")
 
@@ -95,7 +96,7 @@ def import_documents(
     return stats
 
 
-def main():
+def main() -> None:
     """命令行入口"""
     import argparse
 

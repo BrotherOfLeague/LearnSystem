@@ -92,13 +92,32 @@ LearnSystem/
 ### 导入文档
 
 ```bash
-poetry run python -m learn_system.cli import --docs-dir ./data/raw
+poetry run python -m learn_system.loaders.import_docs --docs-dir ./data/raw --output-dir ./data/processed
+```
+
+### 构建索引
+
+```bash
+# 完整构建（生成 chunks.jsonl 并写入 Chroma 向量索引）
+poetry run python -m learn_system.cli.build_index
+
+# 只生成分块，不生成向量
+poetry run python -m learn_system.cli.build_index --no-embed
+
+# 重建索引
+poetry run python -m learn_system.cli.build_index --rebuild
 ```
 
 ### 启动问答
 
 ```bash
-poetry run python -m learn_system.cli chat
+poetry run python -m learn_system.cli.main
+```
+
+### 运行检索评估
+
+```bash
+poetry run python -m learn_system.cli.evaluate --top-k 5
 ```
 
 ### 运行测试

@@ -96,4 +96,5 @@ cython_debug/
 # Project specific
 data/
 storage/
+models/
 *.log

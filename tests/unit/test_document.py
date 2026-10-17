@@ -24,7 +24,7 @@ class TestDocument:
         """测试默认值"""
         path = tmp_path / "test.html"
         doc = Document(source_path=path)
-        assert doc.version == "3.12"
+        assert doc.version == "3.15"
         assert doc.language == "en"
 
 

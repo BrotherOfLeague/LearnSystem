@@ -10,7 +10,7 @@ class Document:
 
     source_path: Path  # 本地文件路径
     source_url: str | None = None  # 官方 URL
-    version: str = "3.12"  # Python 版本
+    version: str = "3.15"  # Python 版本
     language: str = "en"  # 文档语言
     title: str | None = None  # 页面标题
     content_hash: str | None = None  # 内容哈希（用于去重）
@@ -27,7 +27,7 @@ class ParsedDocument:
     code_blocks: list[str] = field(default_factory=list)  # 代码块列表
     source_url: str | None = None  # 官方 URL
     source_path: str = ""  # 本地相对路径
-    version: str = "3.12"  # Python 版本
+    version: str = "3.15"  # Python 版本
     language: str = "en"  # 文档语言
 
 

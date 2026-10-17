@@ -67,7 +67,7 @@ class TestDocumentLoader:
 
         for doc in docs:
             assert doc.source_url is not None
-            assert doc.source_url.startswith("https://docs.python.org/3.12/")
+            assert doc.source_url.startswith("https://docs.python.org/3.15/")
             assert doc.source_url.endswith(".html")
 
     def test_document_version_and_language(self, sample_docs_dir):
@@ -76,5 +76,19 @@ class TestDocumentLoader:
         docs = list(loader.load_documents())
 
         for doc in docs:
-            assert doc.version == "3.12"
+            assert doc.version == "3.15"
             assert doc.language == "en"
+
+    def test_resolves_versioned_subfolder(self, tmp_path):
+        """测试从版本化目录中定位文档根目录并生成正确 URL"""
+        root = tmp_path / "python-3.15-docs-html"
+        lib = root / "library"
+        lib.mkdir(parents=True)
+        (lib / "json.html").write_text("<html><body><h1>json</h1></body></html>")
+
+        loader = DocumentLoader(tmp_path)
+        docs = list(loader.load_documents())
+
+        assert len(docs) == 1
+        assert docs[0].version == "3.15"
+        assert docs[0].source_url == "https://docs.python.org/3.15/library/json.html"

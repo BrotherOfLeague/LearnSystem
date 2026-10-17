@@ -67,6 +67,7 @@ class TestHtmlParser:
         assert result.success
         assert len(result.document.code_blocks) == 1
         assert "def hello" in result.document.code_blocks[0]
+        assert "\n" in result.document.code_blocks[0]
 
     def test_parse_removes_nav_elements(self, temp_html_file):
         """测试移除导航元素"""
@@ -123,3 +124,36 @@ class TestHtmlParser:
 
         assert result.success
         assert result.document.source_url == "https://docs.python.org/3.12/test.html"
+
+    def test_parse_strips_pilcrow_from_title(self, tmp_path):
+        """测试标题去除 headerlink 的 ¶ 符号"""
+        html = (
+            '<html><body><div class="body">'
+            '<h1>Built-in functions<a class="headerlink" href="#t">¶</a></h1>'
+            "<p>body text</p>"
+            "</div></body></html>"
+        )
+        html_file = tmp_path / "pilcrow.html"
+        html_file.write_text(html, encoding="utf-8")
+
+        parser = HtmlParser()
+        result = parser.parse(Document(source_path=html_file))
+
+        assert result.success
+        assert result.document.title == "Built-in functions"
+
+    def test_parse_redirect_stub_returns_failure(self, tmp_path):
+        """测试重定向空壳页返回失败"""
+        html = (
+            "<html><head><noscript>"
+            '<meta http-equiv="refresh" content="0; url=../x.html"/>'
+            "</noscript></head><body><p>redirected</p></body></html>"
+        )
+        html_file = tmp_path / "stub.html"
+        html_file.write_text(html, encoding="utf-8")
+
+        parser = HtmlParser()
+        result = parser.parse(Document(source_path=html_file))
+
+        assert result.success is False
+        assert result.error == "redirect stub"

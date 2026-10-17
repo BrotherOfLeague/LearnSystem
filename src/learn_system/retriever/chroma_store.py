@@ -41,12 +41,15 @@ class ChromaVectorStore(BaseVectorStore):
 
             self._collection = self._client.get_or_create_collection(
                 name=self.collection_name,
-                metadata={"description": "LearnSystem document chunks"},
+                metadata={
+                    "hnsw:space": "cosine",
+                    "description": "LearnSystem document chunks",
+                },
             )
             logger.info(f"Chroma collection '{self.collection_name}' ready")
 
     def add_chunks(self, chunks: list[Chunk], embeddings: list[list[float]]) -> int:
-        """添加分块到向量存储"""
+        """添加或更新分块（upsert）到向量存储"""
         self._ensure_client()
         assert self._collection is not None
 
@@ -54,10 +57,13 @@ class ChromaVectorStore(BaseVectorStore):
         documents = [c.text for c in chunks]
         metadatas = [c.to_metadata() for c in chunks]
 
-        self._collection.add(
-            ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas
+        self._collection.upsert(
+            ids=ids,
+            embeddings=embeddings,
+            documents=documents,
+            metadatas=metadatas,
         )
-        logger.info(f"Added {len(chunks)} chunks to Chroma")
+        logger.info(f"Upserted {len(chunks)} chunks to Chroma")
         return len(chunks)
 
     def search(self, query_embedding: list[float], top_k: int) -> list[SearchResult]:
@@ -68,25 +74,30 @@ class ChromaVectorStore(BaseVectorStore):
         results = self._collection.query(
             query_embeddings=[query_embedding],
             n_results=top_k,
-            include=["distances", "metadatas"],
+            include=["documents", "distances", "metadatas"],
         )
 
-        search_results = []
+        search_results: list[SearchResult] = []
         if results["ids"] and results["ids"][0]:
             for i, chunk_id in enumerate(results["ids"][0]):
                 metadata = results["metadatas"][0][i] if results["metadatas"] else {}
                 distance = results["distances"][0][i] if results["distances"] else 0.0
-                score = 1.0 - distance  # 转换为相似度
+                score = max(-1.0, min(1.0, 1.0 - distance))  # cosine 距离转相似度
+                text = results["documents"][0][i] if results["documents"] else ""
 
                 chunk = Chunk(
                     chunk_id=metadata.get("chunk_id", chunk_id),
                     document_id=metadata.get("document_id", ""),
                     chunk_index=metadata.get("chunk_index", 0),
-                    text=results["documents"][0][i] if results["documents"] else "",
+                    text=text,
+                    code_blocks=[],
                     section_path=metadata.get("section_path", []),
                     source_url=metadata.get("source_url"),
                     source_path=metadata.get("source_path", ""),
-                    version=metadata.get("version", "3.12"),
+                    version=metadata.get("version", "3.15"),
+                    content_hash="",
+                    char_count=metadata.get("char_count", 0),
+                    token_estimate=metadata.get("token_estimate", 0),
                 )
                 search_results.append(SearchResult(chunk=chunk, score=score, distance=distance))
 
@@ -100,8 +111,11 @@ class ChromaVectorStore(BaseVectorStore):
 
     def clear(self) -> None:
         """清空向量存储"""
-        self._ensure_client()
-        assert self._client is not None
-        self._client.delete_collection(self.collection_name)
+        if self._client is not None and self._collection is not None:
+            try:
+                self._client.delete_collection(self.collection_name)
+            except Exception:
+                pass
+        self._client = None
         self._collection = None
         logger.info(f"Cleared collection '{self.collection_name}'")

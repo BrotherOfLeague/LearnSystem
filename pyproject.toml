@@ -1,6 +1,6 @@
 [project]
 name = "learn-system"
-version = "0.1.0"
+version = "1.0.0"
 description = "Python Docs RAG: Chinese QA knowledge base for Python official documentation"
 authors = [
     {name = "846058904@qq.com"}
@@ -40,6 +40,12 @@ dev = [
     "mypy>=1.8.0",
     "httpx>=0.27.0",
 ]
+
+[project.scripts]
+learn-system-chat = "learn_system.cli.main:main"
+learn-system-import = "learn_system.loaders.import_docs:main"
+learn-system-index = "learn_system.cli.build_index:main"
+learn-system-evaluate = "learn_system.cli.evaluate:main"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

@@ -64,13 +64,13 @@ class TestRuleBasedChunker:
             assert "long_function" in c.text
 
     def test_duplicate_detection(self, sample_doc):
-        """测试重复内容检测"""
+        """测试重复内容检测（相同输入产生一致的内容哈希）"""
         chunker = RuleBasedChunker()
         result = chunker.chunk_document(sample_doc)
-        # 相同内容应该检测为重复
         result2 = chunker.chunk_document(sample_doc)
-        common_hashes = result.duplicate_hashes & result2.duplicate_hashes
-        assert len(common_hashes) >= 0  # 可能有或无重复
+        hashes1 = {c.content_hash for c in result.chunks}
+        hashes2 = {c.content_hash for c in result2.chunks}
+        assert hashes1 == hashes2
 
     def test_section_path_preserved(self, sample_doc):
         """测试章节路径保留"""
@@ -92,7 +92,7 @@ class TestRuleBasedChunker:
         doc = ParsedDocument(
             document_id="doc_001",
             title="Test",
-            text=" ".join(["word"] * 1000),
+            text=" ".join(f"word{i}" for i in range(1000)),
         )
         chunker = RuleBasedChunker(min_size=50, max_size=200)
         result = chunker.chunk_document(doc)
@@ -124,3 +124,15 @@ class TestRuleBasedChunker:
             assert meta["chunk_id"] == chunk.chunk_id
             assert meta["document_id"] == chunk.document_id
             assert "code_block_count" in meta
+
+    def test_overlap_keeps_chunks_within_max(self):
+        """测试重叠配置下分块大小不超过上限"""
+        doc = ParsedDocument(
+            document_id="doc_overlap",
+            title="Overlap",
+            text=" ".join(f"token{i}" for i in range(2000)),
+        )
+        chunker = RuleBasedChunker(target_size=100, max_size=200, overlap=40)
+        result = chunker.chunk_document(doc)
+        assert result.total_chunks > 1
+        assert all(c.char_count <= 200 for c in result.chunks)

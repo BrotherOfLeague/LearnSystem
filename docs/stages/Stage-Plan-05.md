@@ -1,4 +1,4 @@
-﻿# Stage-Plan-05：基础 RAG 中文问答
+# Stage-Plan-05：基础 RAG 中文问答
 
 ## 1. 目标
 基础 RAG 中文问答，为后续阶段提供可验证的基础能力。
@@ -33,22 +33,30 @@ Stage-Plan-04 已通过验收；总体需求和设计文档已阅读。
 - 备注：
   - LLM 模型：gpt-4o-mini（默认）
   - 最小相关性阈值：0.3
-  - 测试结果：50 passed
+  - 测试结果：50 passed → 修复后 67 passed
+  - 修复记录（文档版本统一为 3.15）：修复导入序列化、URL 生成、HTML 解析、Chunker、Chroma、CLI 依赖与命令
 
 ## 7. 交接到下一阶段
 ### 可运行命令
 ```bash
+# 导入文档
+poetry run python -m learn_system.loaders.import_docs --docs-dir ./data/raw --output-dir ./data/processed
+
+# 构建索引
+poetry run python -m learn_system.cli.build_index
+
 # 启动问答 CLI
 poetry run python -m learn_system.cli.main
 ```
 
 ### 测试结果
-- pytest: 50 passed（总计）
+- pytest: 67 passed（总计）
 - ruff check: All checks passed!
-- ruff format: 7 files reformatted
+- ruff format: 52 files formatted
 
 ### 已知问题
-- CLI 依赖 questionary 库
+- 真实问答与检索评估需先在 `.env` 配置 `LLM_API_KEY`，并下载 embedding 模型（BAAI/bge-m3）完成向量化
+- 超长代码块整块保留，可能超过分块上限（换取代码完整性）
 
 ### 下一阶段所需输入
 - 已索引的 Chroma 向量存储
