@@ -70,6 +70,7 @@ LearnSystem/
 ├── docs/                 # 文档
 │   ├── 需求文档.md
 │   ├── 设计文档.md
+│   ├── 框架文档.md       # 框架架构与扩展指南
 │   ├── 整体开发计划.md
 │   └── stages/           # 各阶段计划
 ├── backend/              # Django + DRF 后端
