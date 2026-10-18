@@ -71,6 +71,7 @@ LearnSystem/
 │   ├── 需求文档.md
 │   ├── 设计文档.md
 │   ├── 框架文档.md       # 框架架构与扩展指南
+│   ├── 核心原理.md       # RAG / BGE-M3 / 跨语言 embedding 等原理
 │   ├── 整体开发计划.md
 │   └── stages/           # 各阶段计划
 ├── backend/              # Django + DRF 后端
