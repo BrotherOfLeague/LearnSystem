@@ -85,6 +85,12 @@ class HtmlParser:
             self._remove_noise(soup)
 
             text, code_blocks = self._extract_content(soup)
+
+            # 生成「函数/方法清单」摘要块，让「XX 有哪些函数」类问题可直接命中
+            symbols = self._extract_symbols(soup)
+            if len(symbols) >= 3:
+                text = f"{title} 包含以下函数或方法：{', '.join(symbols)}。\n\n{text}"
+
             content_hash = self._compute_hash(text)
             doc_id = self._generate_doc_id(doc.source_path, content_hash)
 
@@ -175,6 +181,19 @@ class HtmlParser:
                     text_parts.append(clean)
 
         return "\n\n".join(text_parts), code_blocks
+
+    def _extract_symbols(self, soup: BeautifulSoup) -> list[str]:
+        """提取本页定义的函数/类/方法名（来自 dt[id] 锚点）"""
+        names: list[str] = []
+        for dt in soup.select("dt[id]"):
+            sig_name = dt.select_one(".sig-name")
+            if sig_name is not None:
+                name = sig_name.get_text(strip=True)
+            else:
+                name = dt.get_text(" ", strip=True).split("(")[0].strip()
+            if name and name not in names:
+                names.append(name)
+        return names
 
     def _collect_blocks(self, node, out: list[tuple[str, str]]) -> None:
         for child in node.children:

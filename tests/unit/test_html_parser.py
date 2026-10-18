@@ -157,3 +157,27 @@ class TestHtmlParser:
 
         assert result.success is False
         assert result.error == "redirect stub"
+
+    def test_parse_extracts_function_symbols_summary(self, tmp_path):
+        """测试提取函数清单摘要块"""
+        html = (
+            '<html><body><div class="body">'
+            "<h1>math — Mathematical functions</h1>"
+            '<dl class="function">'
+            '<dt id="math.ceil">math.<span class="sig-name">ceil</span>(x)</dt>'
+            '<dt id="math.fabs">math.<span class="sig-name">fabs</span>(x)</dt>'
+            '<dt id="math.floor">math.<span class="sig-name">floor</span>(x)</dt>'
+            "</dl>"
+            "</div></body></html>"
+        )
+        html_file = tmp_path / "symbols.html"
+        html_file.write_text(html, encoding="utf-8")
+
+        parser = HtmlParser()
+        result = parser.parse(Document(source_path=html_file))
+
+        assert result.success
+        assert "包含以下函数或方法" in result.document.text
+        assert "ceil" in result.document.text
+        assert "fabs" in result.document.text
+        assert "floor" in result.document.text

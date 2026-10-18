@@ -55,6 +55,13 @@ def test_clear_then_reuse():
     assert store.count() == 1
 
 
+def test_clear_on_fresh_store():
+    """测试未初始化时 clear（应初始化并删除已有集合）"""
+    store = ChromaVectorStore()
+    store.clear()
+    assert store.count() == 0
+
+
 def test_delete_by_document_ids():
     store = ChromaVectorStore()
     c1 = Chunk(

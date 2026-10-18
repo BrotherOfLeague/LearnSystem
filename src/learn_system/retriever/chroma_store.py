@@ -133,7 +133,8 @@ class ChromaVectorStore(BaseVectorStore):
 
     def clear(self) -> None:
         """清空向量存储"""
-        if self._client is not None and self._collection is not None:
+        self._ensure_client()
+        if self._client is not None:
             try:
                 self._client.delete_collection(self.collection_name)
             except Exception:

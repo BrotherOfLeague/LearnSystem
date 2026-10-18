@@ -16,7 +16,7 @@ class OpenAIClient(BaseLLMClient):
         base_url: str | None = None,
         model: str = "gpt-4o-mini",
         temperature: float = 0.2,
-        max_tokens: int = 2000,
+        max_tokens: int = 4000,
     ):
         self._api_key = api_key
         self._base_url = base_url

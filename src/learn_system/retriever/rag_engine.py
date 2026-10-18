@@ -56,7 +56,7 @@ class RAGEngine:
         self,
         retriever: Retriever,
         llm_client: LLMClient,
-        min_relevance_score: float = 0.3,
+        min_relevance_score: float = 0.25,
     ):
         self.retriever = retriever
         self.llm_client = llm_client
