@@ -163,11 +163,8 @@ def main() -> None:
     args = parser.parse_args()
 
     stats_file = args.output_dir / "import_stats.json"
-    import_documents(
-        args.docs_dir, args.output_dir, stats_file, incremental=not args.full
-    )
+    import_documents(args.docs_dir, args.output_dir, stats_file, incremental=not args.full)
 
 
 if __name__ == "__main__":
     main()
-

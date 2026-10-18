@@ -14,14 +14,75 @@ from learn_system.retriever.vector_store import SearchResult
 
 # 英文技术文档中的高频停用词，过滤以减少 BM25 噪声
 STOPWORDS = {
-    "python", "the", "a", "an", "and", "or", "of", "to", "in", "for", "on",
-    "is", "are", "was", "were", "be", "been", "being", "it", "its", "this",
-    "that", "these", "those", "with", "without", "as", "at", "by", "from",
-    "how", "what", "why", "when", "where", "which", "who", "does", "do",
-    "can", "could", "should", "would", "will", "not", "no", "if", "else",
-    "then", "than", "so", "such", "also", "into", "about", "over", "under",
-    "use", "using", "used", "via", "example", "examples", "see", "note",
-    "new", "return", "returns", "returned",
+    "python",
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "of",
+    "to",
+    "in",
+    "for",
+    "on",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "being",
+    "it",
+    "its",
+    "this",
+    "that",
+    "these",
+    "those",
+    "with",
+    "without",
+    "as",
+    "at",
+    "by",
+    "from",
+    "how",
+    "what",
+    "why",
+    "when",
+    "where",
+    "which",
+    "who",
+    "does",
+    "do",
+    "can",
+    "could",
+    "should",
+    "would",
+    "will",
+    "not",
+    "no",
+    "if",
+    "else",
+    "then",
+    "than",
+    "so",
+    "such",
+    "also",
+    "into",
+    "about",
+    "over",
+    "under",
+    "use",
+    "using",
+    "used",
+    "via",
+    "example",
+    "examples",
+    "see",
+    "note",
+    "new",
+    "return",
+    "returns",
+    "returned",
 }
 
 
@@ -60,10 +121,7 @@ class BM25Index:
         for freq in self.doc_freqs:
             for term in freq:
                 df[term] += 1
-        self.idf = {
-            term: math.log(1 + (self.N - n + 0.5) / (n + 0.5))
-            for term, n in df.items()
-        }
+        self.idf = {term: math.log(1 + (self.N - n + 0.5) / (n + 0.5)) for term, n in df.items()}
 
     def search(self, query: str, top_k: int = 10) -> list[SearchResult]:
         """检索最相关的分块，返回按 BM25 分数排序的结果（分数归一化到 [0,1]）"""
@@ -95,6 +153,5 @@ class BM25Index:
 
         max_score = ranked[0][0]
         return [
-            SearchResult(chunk=self.chunks[idx], score=score / max_score)
-            for score, idx in ranked
+            SearchResult(chunk=self.chunks[idx], score=score / max_score) for score, idx in ranked
         ]

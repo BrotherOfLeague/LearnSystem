@@ -99,6 +99,43 @@ class RAGEngine:
             evidence_count=len(relevant),
         )
 
+    def ask_stream(
+        self, question: str, top_k: int | None = None, history: list[dict] | None = None
+    ):
+        """流式问答
+
+        逐段 yield ("delta", 文本)，最后 yield ("done", dict)，
+        dict 含 answer / sources / evidence_count。
+        """
+        results = self.retriever.retrieve(question, top_k)
+        relevant = [r for r in results if r.score >= self.min_relevance_score]
+
+        if not relevant:
+            no_answer = "抱歉，我没有找到与您问题相关的文档来回答这个问题。"
+            yield ("delta", no_answer)
+            yield ("done", {"answer": no_answer, "sources": [], "evidence_count": 0})
+            return
+
+        context = self._build_context(relevant)
+        prompt = self._build_prompt(question, context, history)
+
+        answer_parts: list[str] = []
+        if hasattr(self.llm_client, "generate_stream"):
+            for chunk in self.llm_client.generate_stream(prompt):
+                answer_parts.append(chunk)
+                yield ("delta", chunk)
+        else:
+            response = self.llm_client.generate(prompt)
+            answer_parts.append(response.content)
+            yield ("delta", response.content)
+
+        answer = "".join(answer_parts)
+        sources = [
+            {"title": s.title, "url": s.url or s.path, "score": round(s.score, 4)}
+            for s in self._extract_sources(relevant)
+        ]
+        yield ("done", {"answer": answer, "sources": sources, "evidence_count": len(relevant)})
+
     def _build_context(self, results: list[SearchResult]) -> str:
         """构建上下文"""
         context_parts = []
@@ -112,9 +149,7 @@ class RAGEngine:
 
         return "\n---\n".join(context_parts)
 
-    def _build_prompt(
-        self, question: str, context: str, history: list[dict] | None = None
-    ) -> str:
+    def _build_prompt(self, question: str, context: str, history: list[dict] | None = None) -> str:
         """构建提示词"""
         history_section = ""
         if history:

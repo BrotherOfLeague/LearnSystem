@@ -53,7 +53,7 @@
 
 <script>
 import { marked } from 'marked'
-import { getConversation, listConversations, sendQuestion } from './api'
+import { getConversation, listConversations, sendQuestionStream } from './api'
 
 export default {
   name: 'App',
@@ -99,26 +99,24 @@ export default {
       if (!question || this.loading) return
       this.draft = ''
       this.messages.push({ role: 'user', content: question, sources: [] })
+      const assistantMsg = { role: 'assistant', content: '', sources: [] }
+      this.messages.push(assistantMsg)
       this.loading = true
       this.scrollToBottom()
       try {
-        const res = await sendQuestion(question, this.conversationId)
-        this.conversationId = res.conversation_id
-        this.messages.push({
-          role: 'assistant',
-          content: res.answer,
-          sources: res.sources || [],
+        await sendQuestionStream(question, this.conversationId, {
+          onDelta: (text) => {
+            assistantMsg.content += text
+            this.scrollToBottom()
+          },
+          onDone: (payload) => {
+            this.conversationId = payload.conversation_id
+            assistantMsg.sources = payload.sources || []
+            this.loadConversations()
+          },
         })
-        await this.loadConversations()
       } catch (e) {
-        const msg = e.response && e.response.data && e.response.data.error
-          ? e.response.data.error
-          : e.message
-        this.messages.push({
-          role: 'assistant',
-          content: '请求失败：' + msg,
-          sources: [],
-        })
+        assistantMsg.content = '请求失败：' + (e.message || e)
       } finally {
         this.loading = false
         this.scrollToBottom()

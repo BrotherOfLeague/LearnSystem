@@ -35,9 +35,7 @@ class OpenAIClient(BaseLLMClient):
             try:
                 from openai import OpenAI
             except ImportError as err:
-                raise ImportError(
-                    "openai not installed. Install with: pip install openai"
-                ) from err
+                raise ImportError("openai not installed. Install with: pip install openai") from err
 
             try:
                 import httpx2 as _httpx
@@ -77,3 +75,20 @@ class OpenAIClient(BaseLLMClient):
         except Exception as err:
             logger.error(f"LLM generation failed: {err}")
             raise
+
+    def generate_stream(self, prompt: str, **kwargs):
+        """流式生成回复，逐段 yield 文本"""
+        self._ensure_client()
+        assert self._client is not None
+
+        response = self._client.chat.completions.create(
+            model=self._model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=kwargs.get("temperature", self._temperature),
+            max_tokens=kwargs.get("max_tokens", self._max_tokens),
+            stream=True,
+        )
+
+        for chunk in response:
+            if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content

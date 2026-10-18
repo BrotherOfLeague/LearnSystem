@@ -88,6 +88,37 @@ class TestRAGEngine:
         assert "前一个问题" in prompt
         assert "前一个回答" in prompt
 
+    def test_ask_stream_yields_deltas_then_done(self):
+        class StreamingLLM:
+            model = "gpt-4"
+
+            def generate_stream(self, prompt):
+                yield "第一段"
+                yield "第二段"
+
+        retriever = MagicMock()
+        retriever.retrieve.return_value = [
+            SearchResult(
+                chunk=Chunk(
+                    chunk_id="c1",
+                    document_id="d1",
+                    chunk_index=0,
+                    text="text",
+                    section_path=["T"],
+                    source_url="https://a",
+                ),
+                score=0.9,
+            )
+        ]
+        engine = RAGEngine(retriever, StreamingLLM())
+
+        events = list(engine.ask_stream("question"))
+
+        kinds = [kind for kind, _ in events]
+        assert kinds == ["delta", "delta", "done"]
+        assert events[-1][1]["answer"] == "第一段第二段"
+        assert events[-1][1]["sources"][0]["url"] == "https://a"
+
 
 class TestRAGResponse:
     def test_format_with_sources(self):

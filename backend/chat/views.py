@@ -1,4 +1,7 @@
+import json
+
 from django.conf import settings as django_settings
+from django.http import StreamingHttpResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -28,18 +31,14 @@ class ChatView(APIView):
     def post(self, request) -> Response:
         question = (request.data.get("question") or "").strip()
         if not question:
-            return Response(
-                {"error": "question 不能为空"}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": "question 不能为空"}, status=status.HTTP_400_BAD_REQUEST)
 
         conversation_id = request.data.get("conversation_id")
         conversation = None
         if conversation_id:
             conversation = Conversation.objects.filter(id=conversation_id).first()
             if conversation is None:
-                return Response(
-                    {"error": "会话不存在"}, status=status.HTTP_404_NOT_FOUND
-                )
+                return Response({"error": "会话不存在"}, status=status.HTTP_404_NOT_FOUND)
 
         if conversation is None:
             conversation = Conversation.objects.create(title=question[:50] or "新对话")
@@ -82,3 +81,54 @@ class ChatView(APIView):
                 "evidence_count": response.evidence_count,
             }
         )
+
+
+class ChatStreamView(APIView):
+    """流式问答（SSE），逐段返回回答文本，最后返回来源与会话 ID"""
+
+    def post(self, request) -> StreamingHttpResponse:
+        question = (request.data.get("question") or "").strip()
+        if not question:
+            return Response({"error": "question 不能为空"}, status=status.HTTP_400_BAD_REQUEST)
+
+        conversation_id = request.data.get("conversation_id")
+        conversation = None
+        if conversation_id:
+            conversation = Conversation.objects.filter(id=conversation_id).first()
+            if conversation is None:
+                return Response({"error": "会话不存在"}, status=status.HTTP_404_NOT_FOUND)
+
+        if conversation is None:
+            conversation = Conversation.objects.create(title=question[:50] or "新对话")
+
+        history_limit = getattr(django_settings, "CHAT_HISTORY_LIMIT", 6)
+        recent = list(conversation.messages.order_by("-created_at")[:history_limit])
+        recent.reverse()
+        history = [{"role": m.role, "content": m.content} for m in recent]
+
+        Message.objects.create(conversation=conversation, role="user", content=question)
+        engine = get_engine()
+
+        def event_stream():
+            try:
+                for kind, value in engine.ask_stream(question, history=history):
+                    if kind == "delta":
+                        payload = {"type": "delta", "text": value}
+                    else:
+                        Message.objects.create(
+                            conversation=conversation,
+                            role="assistant",
+                            content=value["answer"],
+                            sources=value["sources"],
+                        )
+                        payload = {
+                            "type": "done",
+                            "conversation_id": str(conversation.id),
+                            "sources": value["sources"],
+                        }
+                    yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+            except Exception as exc:  # noqa: BLE001
+                payload = {"type": "error", "error": str(exc)}
+                yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+        return StreamingHttpResponse(event_stream(), content_type="text/event-stream")

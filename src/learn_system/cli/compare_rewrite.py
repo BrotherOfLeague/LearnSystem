@@ -19,9 +19,7 @@ from learn_system.retriever.retriever import Retriever
 logger = logging.getLogger(__name__)
 
 
-def build_report(
-    baseline: EvaluationMetrics, rewritten: EvaluationMetrics, latency: float
-) -> str:
+def build_report(baseline: EvaluationMetrics, rewritten: EvaluationMetrics, latency: float) -> str:
     lines = [
         "# 查询改写对比报告",
         "",
@@ -60,9 +58,7 @@ def run_comparison(top_k: int = 5, output: str | None = None) -> int:
     print("\n初始化检索组件...")
     provider = LocalEmbeddingProvider(model_name=settings.embedding_model)
     store = ChromaVectorStore(persist_dir=settings.chroma_dir)
-    vector_retriever = Retriever(
-        vector_store=store, embedding_provider=provider, top_k=top_k
-    )
+    vector_retriever = Retriever(vector_store=store, embedding_provider=provider, top_k=top_k)
     llm = OpenAIClient(
         api_key=settings.llm_api_key,
         base_url=settings.llm_base_url,

@@ -79,9 +79,7 @@ def run_comparison(top_k: int = 5, output: str | None = None) -> int:
     print("\n初始化向量检索组件...")
     provider = LocalEmbeddingProvider(model_name=settings.embedding_model)
     store = ChromaVectorStore(persist_dir=settings.chroma_dir)
-    vector_retriever = Retriever(
-        vector_store=store, embedding_provider=provider, top_k=top_k
-    )
+    vector_retriever = Retriever(vector_store=store, embedding_provider=provider, top_k=top_k)
 
     print("构建 BM25 关键词索引...")
     chunks = load_chunks(settings.processed_dir / "chunks.jsonl")

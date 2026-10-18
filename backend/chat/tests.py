@@ -42,3 +42,23 @@ class ChatApiTests(TestCase):
         resp = self.client.get(reverse("health"))
         assert resp.status_code == status.HTTP_200_OK
         assert resp.json()["status"] == "ok"
+
+    @patch("chat.views.get_engine")
+    def test_chat_stream(self, mock_get_engine):
+        engine = MagicMock()
+
+        def fake_stream(question, history=None):
+            yield ("delta", "你好")
+            yield ("done", {"answer": "你好", "sources": [], "evidence_count": 0})
+
+        engine.ask_stream = fake_stream
+        mock_get_engine.return_value = engine
+
+        resp = self.client.post(
+            reverse("chat-stream"), {"question": "你好"}, content_type="application/json"
+        )
+
+        assert resp.status_code == status.HTTP_200_OK
+        content = b"".join(resp.streaming_content).decode("utf-8")
+        assert '"type": "delta"' in content
+        assert '"type": "done"' in content
