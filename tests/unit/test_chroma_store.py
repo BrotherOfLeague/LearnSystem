@@ -1,7 +1,15 @@
 """Chroma 向量存储集成测试（内存模式）"""
 
+import uuid
+
 from learn_system.models.chunk import Chunk
 from learn_system.retriever.chroma_store import ChromaVectorStore
+
+
+def _store(persist_dir=None):
+    return ChromaVectorStore(
+        persist_dir=persist_dir, collection_name=f"test_{uuid.uuid4().hex}"
+    )
 
 
 def _chunk(chunk_id: str, text: str, url: str) -> Chunk:
@@ -17,7 +25,7 @@ def _chunk(chunk_id: str, text: str, url: str) -> Chunk:
 
 
 def test_add_and_search_returns_text():
-    store = ChromaVectorStore()
+    store = _store()
     store.add_chunks(
         [
             _chunk(
@@ -35,7 +43,7 @@ def test_add_and_search_returns_text():
 
 
 def test_upsert_updates_existing_chunk():
-    store = ChromaVectorStore()
+    store = _store()
     store.add_chunks([_chunk("c1", "old text", "https://a")], [[0.1] * 8])
     store.add_chunks([_chunk("c1", "new text", "https://a")], [[0.2] * 8])
 
@@ -45,7 +53,7 @@ def test_upsert_updates_existing_chunk():
 
 
 def test_clear_then_reuse():
-    store = ChromaVectorStore()
+    store = _store()
     store.add_chunks([_chunk("c1", "text", "https://a")], [[0.1] * 8])
 
     store.clear()
@@ -57,13 +65,13 @@ def test_clear_then_reuse():
 
 def test_clear_on_fresh_store():
     """测试未初始化时 clear（应初始化并删除已有集合）"""
-    store = ChromaVectorStore()
+    store = _store()
     store.clear()
     assert store.count() == 0
 
 
 def test_delete_by_document_ids():
-    store = ChromaVectorStore()
+    store = _store()
     c1 = Chunk(
         chunk_id="c1",
         document_id="doc_a",

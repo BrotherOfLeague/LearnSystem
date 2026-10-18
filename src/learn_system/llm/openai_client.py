@@ -37,13 +37,10 @@ class OpenAIClient(BaseLLMClient):
             except ImportError as err:
                 raise ImportError("openai not installed. Install with: pip install openai") from err
 
-            try:
-                import httpx2 as _httpx
-            except ImportError:
-                import httpx as _httpx
+            import httpx
 
             # 禁用代理自动检测：避免误读系统代理（如 Clash 未运行时）导致请求超时
-            http_client = _httpx.Client(trust_env=False)
+            http_client = httpx.Client(trust_env=False)
             self._client = OpenAI(
                 api_key=self._api_key,
                 base_url=self._base_url,
@@ -77,7 +74,7 @@ class OpenAIClient(BaseLLMClient):
             raise
 
     def generate_stream(self, prompt: str, **kwargs):
-        """流式生成回复，逐段 yield 文本"""
+        """流式生成回复，逐段 yield 文本；流式无输出时回退到非流式"""
         self._ensure_client()
         assert self._client is not None
 
@@ -89,6 +86,14 @@ class OpenAIClient(BaseLLMClient):
             stream=True,
         )
 
+        yielded = False
         for chunk in response:
             if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                yielded = True
                 yield chunk.choices[0].delta.content
+
+        if not yielded:
+            logger.warning("流式响应无内容，回退到非流式生成")
+            fallback = self.generate(prompt, **kwargs)
+            if fallback.content:
+                yield fallback.content

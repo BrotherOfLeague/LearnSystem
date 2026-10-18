@@ -2,6 +2,10 @@
 
 Python Docs RAG：基于 Python 官方文档的中文智能问答知识库。
 
+## 效果展示
+
+![LearnSystem 问答界面效果图](docs/result.png)
+
 ## 项目概述
 
 将 Python 官方文档下载并建立本地可检索的知识库，允许用户使用中文提问，由大语言模型基于检索到的英文官方文档生成中文回答，并提供可核查的官方来源链接。
@@ -72,6 +76,7 @@ LearnSystem/
 │   ├── 设计文档.md
 │   ├── 框架文档.md       # 框架架构与扩展指南
 │   ├── 核心原理.md       # RAG / BGE-M3 / 跨语言 embedding 等原理
+│   ├── Q&A.md            # 开发测试踩坑记录
 │   ├── 整体开发计划.md
 │   └── stages/           # 各阶段计划
 ├── backend/              # Django + DRF 后端
@@ -82,6 +87,8 @@ LearnSystem/
 ├── pyproject.toml        # 项目配置
 └── .env.example          # 环境变量示例
 ```
+
+> 开发/测试踩坑记录见 [`docs/Q&A.md`](docs/Q&A.md)。
 
 ## 开发阶段
 
@@ -107,6 +114,23 @@ LearnSystem/
 ```bash
 poetry run python -m learn_system.loaders.import_docs --docs-dir ./data/raw --output-dir ./data/processed
 ```
+
+#### 多来源导入（追加模式）
+
+要在一个知识库里合并多个文档来源（如 Python 官方文档 + scikit-learn 用户指南），
+每个来源用各自的 `--base-url` / `--version` 导入，后续来源加 `--append` 追加：
+
+```bash
+# 第一个来源（覆盖创建）
+poetry run python -m learn_system.loaders.import_docs --docs-dir ./data/raw/python-3.15-docs-html --output-dir ./data/processed
+
+# 后续来源（追加，保留已有来源记录，链接/版本各自正确）
+poetry run python -m learn_system.loaders.import_docs --docs-dir ./data/raw/sklearn-1.9-docs --output-dir ./data/processed --base-url https://scikit-learn.org/stable --version 1.9 --append
+```
+
+- `--append` 只增删「本来源」的记录，其他来源原样保留；
+- 已有多个来源后，重新导入任意来源都应加 `--append`，否则会覆盖掉其他来源；
+- 下载第三方 Sphinx 文档站可用 `scripts/crawl_sphinx_docs.py`（见脚本内注释）。
 
 ### 构建索引
 

@@ -92,3 +92,56 @@ class TestDocumentLoader:
         assert len(docs) == 1
         assert docs[0].version == "3.15"
         assert docs[0].source_url == "https://docs.python.org/3.15/library/json.html"
+
+    def test_custom_base_url(self, sample_docs_dir):
+        """测试自定义基础 URL（非 Python 文档源，如 scikit-learn）"""
+        loader = DocumentLoader(sample_docs_dir, base_url="https://scikit-learn.org/stable")
+        docs = list(loader.load_documents())
+
+        for doc in docs:
+            assert doc.source_url.startswith("https://scikit-learn.org/stable/")
+            assert doc.source_url.endswith(".html")
+
+    def test_version_override(self, sample_docs_dir):
+        """测试强制指定版本（目录名不含版本号时）"""
+        loader = DocumentLoader(
+            sample_docs_dir,
+            version="1.9",
+            base_url="https://scikit-learn.org/stable",
+        )
+        docs = list(loader.load_documents())
+
+        for doc in docs:
+            assert doc.version == "1.9"
+            assert doc.source_url.startswith("https://scikit-learn.org/stable/")
+
+    def test_detects_version_from_outer_dir(self, tmp_path):
+        """测试从外层目录名识别版本（如 sklearn-1.9-docs 内含 stable/ 子目录）"""
+        root = tmp_path / "sklearn-1.9-docs"
+        stable = root / "stable"
+        stable.mkdir(parents=True)
+        (stable / "user_guide.html").write_text("<html><body><h1>User Guide</h1></body></html>")
+
+        loader = DocumentLoader(root, base_url="https://scikit-learn.org/stable")
+        docs = list(loader.load_documents())
+
+        assert len(docs) == 1
+        assert docs[0].version == "1.9"
+        assert docs[0].source_url == "https://scikit-learn.org/stable/user_guide.html"
+
+    def test_skips_navigation_and_changelog_pages(self, tmp_path):
+        """测试跳过索引页与 What's New 变更记录"""
+        docs_dir = tmp_path / "docs"
+        docs_dir.mkdir()
+        (docs_dir / "index.html").write_text("<html><body><h1>Index</h1></body></html>")
+        (docs_dir / "genindex.html").write_text("<html><body><h1>Index</h1></body></html>")
+        (docs_dir / "genindex-all.html").write_text("<html><body><h1>Index</h1></body></html>")
+        (docs_dir / "genindex-M.html").write_text("<html><body><h1>Index – M</h1></body></html>")
+        whatsnew = docs_dir / "whatsnew"
+        whatsnew.mkdir()
+        (whatsnew / "changelog.html").write_text("<html><body><h1>Changelog</h1></body></html>")
+
+        loader = DocumentLoader(docs_dir)
+        docs = list(loader.load_documents())
+
+        assert {d.source_path.name for d in docs} == {"index.html"}

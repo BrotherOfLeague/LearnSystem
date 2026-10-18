@@ -51,3 +51,5 @@ class ImportStats:
     failed_count: int = 0
     failed_files: list[tuple[str, str]] = field(default_factory=list)  # [(path, error), ...]
     skipped_count: int = 0  # 跳过数量（已存在/重复）
+    removed_count: int = 0  # 已删除的陈旧记录数量
+    removed_files: list[str] = field(default_factory=list)  # 已删除的陈旧文件路径

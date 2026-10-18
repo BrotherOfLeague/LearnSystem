@@ -120,7 +120,7 @@ class HtmlParser:
             element.decompose()
 
     def _clean_heading(self, text: str) -> str:
-        text = text.replace("¶", " ")
+        text = text.replace("¶", " ").replace("#", " ")
         return re.sub(r"\s+", " ", text).strip()
 
     def _select_content(self, soup: BeautifulSoup):
@@ -176,7 +176,7 @@ class HtmlParser:
                 code_blocks.append(code)
                 text_parts.append(f"```\n{code}\n```")
             else:
-                clean = re.sub(r"[ \t\r\f\v]+", " ", value.replace("¶", " ")).strip()
+                clean = re.sub(r"[ \t\r\f\v]+", " ", value.replace("¶", " ").replace("#", " ")).strip()
                 if clean:
                     text_parts.append(clean)
 

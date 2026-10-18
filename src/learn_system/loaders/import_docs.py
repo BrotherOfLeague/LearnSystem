@@ -31,11 +31,22 @@ def _load_previous(output_file: Path) -> dict[str, dict]:
     return previous
 
 
+def _is_under(path: str, root: str) -> bool:
+    """判断 path 是否位于 root 目录下（同一路径或子路径）"""
+    try:
+        return Path(path).is_relative_to(root)
+    except ValueError:
+        return False
+
+
 def import_documents(
     docs_dir: Path,
     output_dir: Path,
     stats_file: Path | None = None,
     incremental: bool = True,
+    version: str | None = None,
+    base_url: str | None = None,
+    append: bool = False,
 ) -> ImportStats:
     """导入并解析文档
 
@@ -44,17 +55,29 @@ def import_documents(
         output_dir: 输出目录
         stats_file: 统计信息保存路径
         incremental: 是否启用增量导入（复用内容未变化的文档）
+        version: 强制指定文档版本（如 scikit-learn 用 "1.9"）
+        base_url: 官方站点基础 URL（如 https://scikit-learn.org/stable）
+        append: 是否追加到现有 documents.jsonl（多来源合并，保留其他来源记录）
 
     Returns:
         ImportStats 统计信息
     """
     output_dir.mkdir(parents=True, exist_ok=True)
-    loader = DocumentLoader(docs_dir)
+    loader = DocumentLoader(docs_dir, version=version, base_url=base_url)
     parser = HtmlParser()
     stats = ImportStats()
 
     output_file = output_dir / "documents.jsonl"
-    previous = _load_previous(output_file) if incremental else {}
+    previous = _load_previous(output_file) if (incremental or append) else {}
+
+    # 追加模式：只把「属于本来源」的旧记录纳入复用/删除，其他来源记录原样保留。
+    docs_root_str = str(loader.docs_root)
+    if append:
+        owned_previous = {k: v for k, v in previous.items() if _is_under(k, docs_root_str)}
+        other_records = [v for k, v in previous.items() if k not in owned_previous]
+    else:
+        owned_previous = previous
+        other_records = []
 
     records: list[dict] = []
     current_paths: set[str] = set()
@@ -70,7 +93,7 @@ def import_documents(
         source_hash = hashlib.md5(doc.source_path.read_bytes()).hexdigest()
 
         # 增量：内容未变化则复用上次结果
-        prev = previous.get(source_path_str)
+        prev = owned_previous.get(source_path_str)
         if prev is not None and prev.get("source_hash") == source_hash:
             records.append(prev)
             stats.skipped_count += 1
@@ -90,14 +113,17 @@ def import_documents(
         if i % 100 == 0:
             logger.info(f"进度: {i}/{total_files} ({100 * i / total_files:.1f}%)")
 
-    removed = sorted(set(previous) - current_paths)
+    removed = sorted(set(owned_previous) - current_paths)
+    stats.removed_count = len(removed)
+    stats.removed_files = removed
 
-    # 保存文档到 JSONL 文件
+    # 保存文档到 JSONL 文件（追加模式：其他来源记录 + 本来源记录）
+    total_records = len(other_records) + len(records)
     with open(output_file, "w", encoding="utf-8") as f:
-        for record in records:
+        for record in other_records + records:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
-    logger.info(f"文档已保存到: {output_file}")
+    logger.info(f"文档已保存到: {output_file}（共 {total_records} 条）")
 
     # 保存统计信息
     if stats_file:
@@ -110,6 +136,7 @@ def import_documents(
             "removed_count": len(removed),
             "removed_files": removed,
             "failed_files": stats.failed_files,
+            "total_records": total_records,
         }
         with open(stats_file, "w", encoding="utf-8") as f:
             json.dump(stats_dict, f, ensure_ascii=False, indent=2)
@@ -123,6 +150,8 @@ def import_documents(
     logger.info(f"未变化(复用): {stats.skipped_count}")
     logger.info(f"失败: {stats.failed_count}")
     logger.info(f"已删除: {len(removed)}")
+    if append:
+        logger.info(f"知识库总记录数: {total_records}")
     logger.info("=" * 50)
 
     if stats.failed_files:
@@ -159,11 +188,36 @@ def main() -> None:
         action="store_true",
         help="全量重新解析（默认增量导入）",
     )
+    parser.add_argument(
+        "--version",
+        type=str,
+        default=None,
+        help="强制指定文档版本（如 scikit-learn 用 1.9）",
+    )
+    parser.add_argument(
+        "--base-url",
+        type=str,
+        default=None,
+        help="官方站点基础 URL（可含 {version} 占位符；缺省为 Python 文档站）",
+    )
+    parser.add_argument(
+        "--append",
+        action="store_true",
+        help="追加到现有 documents.jsonl（多来源合并，保留其他来源记录）",
+    )
 
     args = parser.parse_args()
 
     stats_file = args.output_dir / "import_stats.json"
-    import_documents(args.docs_dir, args.output_dir, stats_file, incremental=not args.full)
+    import_documents(
+        args.docs_dir,
+        args.output_dir,
+        stats_file,
+        incremental=not args.full,
+        version=args.version,
+        base_url=args.base_url,
+        append=args.append,
+    )
 
 
 if __name__ == "__main__":

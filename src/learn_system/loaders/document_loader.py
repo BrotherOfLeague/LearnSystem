@@ -16,31 +16,46 @@ logger = logging.getLogger(__name__)
 # 不应作为知识库内容的页面
 NON_CONTENT_FILES = {
     "404.html",
-    "genindex.html",
     "py-modindex.html",
     "search.html",
     "copyright.html",
     "license.html",
 }
-# 不属于正文的目录
-NON_CONTENT_DIRS = {"_static", "_sources", "_images", "_downloads", "_doctrees"}
+# 不属于正文的目录（whatsnew 为版本变更记录，对具体查询是噪声）
+NON_CONTENT_DIRS = {
+    "_static",
+    "_sources",
+    "_images",
+    "_downloads",
+    "_doctrees",
+    "whatsnew",
+}
 
 
 class DocumentLoader:
     """文档加载器"""
 
-    def __init__(self, docs_dir: Path, version: str | None = None):
+    def __init__(
+        self,
+        docs_dir: Path,
+        version: str | None = None,
+        base_url: str | None = None,
+    ):
         """初始化加载器
 
         Args:
             docs_dir: 文档根目录（可以是解压目录本身，或包含解压目录的父目录）
-            version: 强制指定 Python 版本；缺省时从目录名自动识别，再退回配置
+            version: 强制指定文档版本；缺省时从目录名自动识别，再退回配置
+            base_url: 官方站点基础 URL，可含 {version} 占位符；缺省为 Python 文档站
         """
         self.docs_dir = Path(docs_dir)
         self._validate_dir()
         self.docs_root = self._resolve_docs_root()
         self.version = version or self._detect_version() or settings.python_docs_version
-        logger.info(f"文档根目录: {self.docs_root}，版本: {self.version}")
+        self.base_url = (base_url or "https://docs.python.org/{version}").rstrip("/")
+        logger.info(
+            f"文档根目录: {self.docs_root}，版本: {self.version}，基础 URL: {self.base_url}"
+        )
 
     def _validate_dir(self) -> None:
         """验证目录是否存在且包含 HTML 文件"""
@@ -60,9 +75,12 @@ class DocumentLoader:
         return self.docs_dir
 
     def _detect_version(self) -> str | None:
-        """从目录名（如 python-3.15-docs-html）识别版本号"""
-        match = re.search(r"(\d+\.\d+)", self.docs_root.name)
-        return match.group(1) if match else None
+        """从目录名（如 python-3.15-docs-html 或 sklearn-1.9-docs）识别版本号"""
+        for name in (self.docs_root.name, self.docs_dir.name):
+            match = re.search(r"(\d+\.\d+)", name)
+            if match:
+                return match.group(1)
+        return None
 
     def _is_non_content(self, file_path: Path) -> bool:
         """判断是否为非正文页面或静态资源"""
@@ -70,6 +88,9 @@ class DocumentLoader:
         if any(part in NON_CONTENT_DIRS for part in rel.parts):
             return True
         if file_path.name in NON_CONTENT_FILES:
+            return True
+        # 索引页（genindex.html / genindex-all.html / genindex-A..Z.html / genindex-Symbols.html 等）
+        if file_path.name.startswith("genindex"):
             return True
         return False
 
@@ -86,7 +107,7 @@ class DocumentLoader:
     def _get_source_url(self, file_path: Path) -> str:
         """根据文件路径生成官方 URL"""
         relative_path = file_path.relative_to(self.docs_root).as_posix()
-        return f"https://docs.python.org/{self.version}/{relative_path}"
+        return f"{self.base_url.format(version=self.version)}/{relative_path}"
 
     def load_documents(self) -> Iterator[Document]:
         """加载所有 HTML 文档
